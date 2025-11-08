@@ -1,13 +1,16 @@
 """Diagnostic tests to identify the root cause of query failures"""
-import sys
+
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import socket
+import ssl
 
 import pytest
-from config import config
 from ai_generator import AIGenerator
-import ssl
-import socket
+from config import config
 
 
 class TestDiagnostics:
@@ -28,6 +31,7 @@ class TestDiagnostics:
         print("\n=== Network Connectivity Test ===")
 
         import urllib.parse
+
         parsed = urllib.parse.urlparse(config.OPENROUTER_BASE_URL)
         host = parsed.hostname
         port = 443
@@ -50,6 +54,7 @@ class TestDiagnostics:
         print(f"SSL version: {ssl.OPENSSL_VERSION}")
 
         import urllib.parse
+
         parsed = urllib.parse.urlparse(config.OPENROUTER_BASE_URL)
         host = parsed.hostname
 
@@ -75,14 +80,14 @@ class TestDiagnostics:
             api_key=config.OPENROUTER_API_KEY,
             base_url=config.OPENROUTER_BASE_URL,
             model=config.DEFAULT_MODEL,
-            fallback_models=config.FALLBACK_MODELS
+            fallback_models=config.FALLBACK_MODELS,
         )
 
         try:
             response = ai_gen.generate_response(
                 query="What is 2+2? Answer with just the number.",
                 tools=None,
-                tool_manager=None
+                tool_manager=None,
             )
 
             print(f"Response: {response}")
@@ -100,6 +105,7 @@ class TestDiagnostics:
         except Exception as e:
             print(f"✗ Exception: {e}")
             import traceback
+
             print(traceback.format_exc())
 
 
