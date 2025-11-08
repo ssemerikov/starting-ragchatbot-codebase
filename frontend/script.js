@@ -3,9 +3,11 @@ const API_URL = '/api';
 
 // Global state
 let currentSessionId = null;
+let availableModels = [];
+let currentModel = null;
 
 // DOM elements
-let chatMessages, chatInput, sendButton, totalCourses, courseTitles;
+let chatMessages, chatInput, sendButton, totalCourses, courseTitles, modelSelect, modelContext;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,10 +17,13 @@ document.addEventListener('DOMContentLoaded', () => {
     sendButton = document.getElementById('sendButton');
     totalCourses = document.getElementById('totalCourses');
     courseTitles = document.getElementById('courseTitles');
-    
+    modelSelect = document.getElementById('modelSelect');
+    modelContext = document.getElementById('modelContext');
+
     setupEventListeners();
     createNewSession();
     loadCourseStats();
+    loadAvailableModels();
 });
 
 // Event Listeners
@@ -38,6 +43,11 @@ function setupEventListeners() {
             sendMessage();
         });
     });
+
+    // Model selector
+    if (modelSelect) {
+        modelSelect.addEventListener('change', handleModelChange);
+    }
 }
 
 
@@ -158,15 +168,15 @@ async function loadCourseStats() {
         console.log('Loading course stats...');
         const response = await fetch(`${API_URL}/courses`);
         if (!response.ok) throw new Error('Failed to load course stats');
-        
+
         const data = await response.json();
         console.log('Course data received:', data);
-        
+
         // Update stats in UI
         if (totalCourses) {
             totalCourses.textContent = data.total_courses;
         }
-        
+
         // Update course titles
         if (courseTitles) {
             if (data.course_titles && data.course_titles.length > 0) {
@@ -177,7 +187,7 @@ async function loadCourseStats() {
                 courseTitles.innerHTML = '<span class="no-courses">No courses available</span>';
             }
         }
-        
+
     } catch (error) {
         console.error('Error loading course stats:', error);
         // Set default values on error
@@ -188,4 +198,109 @@ async function loadCourseStats() {
             courseTitles.innerHTML = '<span class="error">Failed to load courses</span>';
         }
     }
+}
+
+// Load available models
+async function loadAvailableModels() {
+    try {
+        console.log('Loading available models...');
+        const response = await fetch(`${API_URL}/models`);
+        if (!response.ok) throw new Error('Failed to load models');
+
+        const data = await response.json();
+        console.log('Models data received:', data);
+
+        availableModels = data.available_models;
+        currentModel = data.current_model;
+
+        // Populate model selector
+        if (modelSelect) {
+            modelSelect.innerHTML = availableModels.map(model => `
+                <option value="${model.id}" ${model.id === currentModel ? 'selected' : ''}>
+                    ${model.name}
+                </option>
+            `).join('');
+
+            // Update context display
+            updateModelContext();
+        }
+
+    } catch (error) {
+        console.error('Error loading models:', error);
+        if (modelSelect) {
+            modelSelect.innerHTML = '<option value="">Error loading models</option>';
+        }
+    }
+}
+
+// Update model context display
+function updateModelContext() {
+    if (!modelContext || !currentModel) return;
+
+    const model = availableModels.find(m => m.id === currentModel);
+    if (model) {
+        const contextK = Math.round(model.context / 1000);
+        modelContext.textContent = `${contextK}k context`;
+        modelContext.title = model.description;
+    }
+}
+
+// Handle model change
+async function handleModelChange() {
+    const selectedModel = modelSelect.value;
+    if (!selectedModel || selectedModel === currentModel) return;
+
+    // Disable selector during change
+    modelSelect.disabled = true;
+
+    try {
+        const response = await fetch(`${API_URL}/models/select`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model_id: selectedModel
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to switch model');
+        }
+
+        const data = await response.json();
+        currentModel = selectedModel;
+        updateModelContext();
+
+        // Show notification
+        showNotification(data.message, 'success');
+
+    } catch (error) {
+        console.error('Error switching model:', error);
+        // Revert selection
+        modelSelect.value = currentModel;
+        showNotification('Failed to switch model. Using fallback.', 'error');
+    } finally {
+        modelSelect.disabled = false;
+    }
+}
+
+// Show notification
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+
+    // Add to body
+    document.body.appendChild(notification);
+
+    // Trigger animation
+    setTimeout(() => notification.classList.add('show'), 10);
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
 }

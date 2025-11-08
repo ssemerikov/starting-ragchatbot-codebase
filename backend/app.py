@@ -51,6 +51,22 @@ class CourseStats(BaseModel):
     total_courses: int
     course_titles: List[str]
 
+class ModelInfo(BaseModel):
+    """Information about a model"""
+    id: str
+    name: str
+    context: int
+    description: str
+
+class ModelsResponse(BaseModel):
+    """Response model for available models"""
+    current_model: str
+    available_models: List[ModelInfo]
+
+class ModelSelectRequest(BaseModel):
+    """Request model for selecting a model"""
+    model_id: str
+
 # API Endpoints
 
 @app.post("/api/query", response_model=QueryResponse)
@@ -82,6 +98,50 @@ async def get_course_stats():
             total_courses=analytics["total_courses"],
             course_titles=analytics["course_titles"]
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/models", response_model=ModelsResponse)
+async def get_available_models():
+    """Get list of available models and current selection"""
+    try:
+        current_model = rag_system.ai_generator.get_current_model()
+
+        # Build list of model info from config
+        models = []
+        for model_id, model_data in config.AVAILABLE_MODELS.items():
+            models.append(ModelInfo(
+                id=model_id,
+                name=model_data["name"],
+                context=model_data["context"],
+                description=model_data["description"]
+            ))
+
+        return ModelsResponse(
+            current_model=current_model,
+            available_models=models
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/models/select")
+async def select_model(request: ModelSelectRequest):
+    """Switch to a different model"""
+    try:
+        # Validate model exists
+        if request.model_id not in config.AVAILABLE_MODELS:
+            raise HTTPException(status_code=400, detail=f"Model '{request.model_id}' not found")
+
+        # Update the model
+        rag_system.ai_generator.set_model(request.model_id)
+
+        return {
+            "success": True,
+            "current_model": request.model_id,
+            "message": f"Switched to {config.AVAILABLE_MODELS[request.model_id]['name']}"
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
