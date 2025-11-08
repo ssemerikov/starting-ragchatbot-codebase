@@ -7,7 +7,7 @@ let availableModels = [];
 let currentModel = null;
 
 // DOM elements
-let chatMessages, chatInput, sendButton, totalCourses, courseTitles, modelSelect, modelContext;
+let chatMessages, chatInput, sendButton, totalCourses, courseTitles, modelSelect, modelContext, newChatButton;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     courseTitles = document.getElementById('courseTitles');
     modelSelect = document.getElementById('modelSelect');
     modelContext = document.getElementById('modelContext');
+    newChatButton = document.getElementById('newChatButton');
 
     setupEventListeners();
     createNewSession();
@@ -33,8 +34,12 @@ function setupEventListeners() {
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
-    
-    
+
+    // New chat button
+    if (newChatButton) {
+        newChatButton.addEventListener('click', createNewSession);
+    }
+
     // Suggested questions
     document.querySelectorAll('.suggested-item').forEach(button => {
         button.addEventListener('click', (e) => {
