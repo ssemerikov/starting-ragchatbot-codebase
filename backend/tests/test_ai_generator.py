@@ -1,14 +1,17 @@
 """Tests for AI Generator tool calling functionality"""
-import sys
+
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
 from ai_generator import AIGenerator
-from search_tools import ToolManager, CourseSearchTool
-from vector_store import VectorStore
 from config import config
+from search_tools import CourseSearchTool, ToolManager
+from vector_store import VectorStore
 
 
 class TestAIGeneratorToolCalling:
@@ -22,14 +25,12 @@ class TestAIGeneratorToolCalling:
             api_key=config.OPENROUTER_API_KEY,
             base_url=config.OPENROUTER_BASE_URL,
             model=config.DEFAULT_MODEL,
-            fallback_models=config.FALLBACK_MODELS
+            fallback_models=config.FALLBACK_MODELS,
         )
 
         # Create real tool manager and search tool
         self.vector_store = VectorStore(
-            config.CHROMA_PATH,
-            config.EMBEDDING_MODEL,
-            config.MAX_RESULTS
+            config.CHROMA_PATH, config.EMBEDDING_MODEL, config.MAX_RESULTS
         )
         self.tool_manager = ToolManager()
         self.search_tool = CourseSearchTool(self.vector_store)
@@ -61,10 +62,7 @@ class TestAIGeneratorToolCalling:
         query = "What is MCP?"
         print(f"Testing tool execution with query: {query}")
 
-        result = self.tool_manager.execute_tool(
-            "search_course_content",
-            query=query
-        )
+        result = self.tool_manager.execute_tool("search_course_content", query=query)
 
         print(f"Result type: {type(result)}")
         print(f"Result length: {len(result)}")
@@ -86,9 +84,7 @@ class TestAIGeneratorToolCalling:
 
         try:
             response = self.ai_generator.generate_response(
-                query=query,
-                tools=tool_defs,
-                tool_manager=self.tool_manager
+                query=query, tools=tool_defs, tool_manager=self.tool_manager
             )
 
             print(f"\nResponse type: {type(response)}")
@@ -124,9 +120,7 @@ class TestToolCallFlow:
     def setup(self):
         """Setup test fixtures"""
         self.vector_store = VectorStore(
-            config.CHROMA_PATH,
-            config.EMBEDDING_MODEL,
-            config.MAX_RESULTS
+            config.CHROMA_PATH, config.EMBEDDING_MODEL, config.MAX_RESULTS
         )
         self.tool_manager = ToolManager()
         self.search_tool = CourseSearchTool(self.vector_store)
@@ -158,7 +152,7 @@ class TestToolCallFlow:
         mock_final_response.choices = [mock_final_choice]
 
         # Test that tool gets executed
-        with patch.object(AIGenerator, '__init__', return_value=None):
+        with patch.object(AIGenerator, "__init__", return_value=None):
             ai_gen = AIGenerator.__new__(AIGenerator)
             ai_gen.client = MagicMock()
             ai_gen.base_params = {"temperature": 0, "max_tokens": 800}
@@ -167,21 +161,18 @@ class TestToolCallFlow:
             # Mock the API calls
             ai_gen.client.chat.completions.create.side_effect = [
                 mock_initial_response,
-                mock_final_response
+                mock_final_response,
             ]
 
             # Test _handle_tool_execution
             messages = [
                 {"role": "system", "content": "test"},
-                {"role": "user", "content": "What is MCP?"}
+                {"role": "user", "content": "What is MCP?"},
             ]
             base_params = {"model": "test-model"}
 
             result = ai_gen._handle_tool_execution(
-                mock_initial_response,
-                messages,
-                base_params,
-                self.tool_manager
+                mock_initial_response, messages, base_params, self.tool_manager
             )
 
             print(f"Result: {result}")

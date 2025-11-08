@@ -7,7 +7,7 @@ let availableModels = [];
 let currentModel = null;
 
 // DOM elements
-let chatMessages, chatInput, sendButton, totalCourses, courseTitles, modelSelect, modelContext, newChatButton;
+let chatMessages, chatInput, sendButton, totalCourses, courseTitles, modelSelect, modelContext, newChatButton, themeToggle;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -20,6 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
     modelSelect = document.getElementById('modelSelect');
     modelContext = document.getElementById('modelContext');
     newChatButton = document.getElementById('newChatButton');
+    themeToggle = document.getElementById('themeToggle');
+
+    // Load theme preference before setting up other features
+    loadThemePreference();
 
     setupEventListeners();
     createNewSession();
@@ -52,6 +56,11 @@ function setupEventListeners() {
     // Model selector
     if (modelSelect) {
         modelSelect.addEventListener('change', handleModelChange);
+    }
+
+    // Theme toggle
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
     }
 }
 
@@ -319,4 +328,34 @@ function showNotification(message, type = 'info') {
         notification.classList.remove('show');
         setTimeout(() => notification.remove(), 300);
     }, 3000);
+}
+
+// Theme Toggle Functions
+function toggleTheme() {
+    const currentTheme = document.body.getAttribute('data-theme');
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+    setTheme(newTheme);
+}
+
+function setTheme(theme) {
+    if (theme === 'light') {
+        document.body.setAttribute('data-theme', 'light');
+    } else {
+        document.body.removeAttribute('data-theme');
+    }
+
+    // Save preference to localStorage
+    localStorage.setItem('theme', theme);
+}
+
+function loadThemePreference() {
+    const savedTheme = localStorage.getItem('theme');
+
+    if (savedTheme) {
+        setTheme(savedTheme);
+    } else {
+        // Default to dark theme (no attribute needed)
+        localStorage.setItem('theme', 'dark');
+    }
 }

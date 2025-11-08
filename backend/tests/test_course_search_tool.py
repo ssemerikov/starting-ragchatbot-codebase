@@ -1,12 +1,14 @@
 """Tests for CourseSearchTool functionality"""
-import sys
+
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
+from config import config
 from search_tools import CourseSearchTool
 from vector_store import VectorStore
-from config import config
 
 
 class TestCourseSearchTool:
@@ -17,9 +19,7 @@ class TestCourseSearchTool:
         """Setup test fixtures"""
         # Use existing vector store with loaded courses
         self.vector_store = VectorStore(
-            config.CHROMA_PATH,
-            config.EMBEDDING_MODEL,
-            config.MAX_RESULTS
+            config.CHROMA_PATH, config.EMBEDDING_MODEL, config.MAX_RESULTS
         )
         self.search_tool = CourseSearchTool(self.vector_store)
 
@@ -82,9 +82,7 @@ class TestCourseSearchTool:
         print(f"Lesson filter: {lesson_number}")
 
         result = self.search_tool.execute(
-            query=query,
-            course_name=course_name,
-            lesson_number=lesson_number
+            query=query, course_name=course_name, lesson_number=lesson_number
         )
 
         print(f"Result type: {type(result)}")

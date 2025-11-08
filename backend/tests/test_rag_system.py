@@ -1,11 +1,13 @@
 """Tests for RAG System integration"""
-import sys
+
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
-from rag_system import RAGSystem
 from config import config
+from rag_system import RAGSystem
 
 
 class TestRAGSystemQueries:
@@ -43,8 +45,8 @@ class TestRAGSystemQueries:
             print(f"  Description: {tool.get('function', {}).get('description')}")
 
         assert len(tools) >= 1  # Should have at least search_course_content
-        tool_names = [t.get('function', {}).get('name') for t in tools]
-        assert 'search_course_content' in tool_names
+        tool_names = [t.get("function", {}).get("name") for t in tools]
+        assert "search_course_content" in tool_names
 
     def test_course_analytics(self):
         """Test course analytics endpoint"""
@@ -55,10 +57,10 @@ class TestRAGSystemQueries:
         print(f"Total courses: {analytics['total_courses']}")
         print(f"Course titles: {analytics['course_titles']}")
 
-        assert 'total_courses' in analytics
-        assert 'course_titles' in analytics
-        assert analytics['total_courses'] > 0
-        assert len(analytics['course_titles']) > 0
+        assert "total_courses" in analytics
+        assert "course_titles" in analytics
+        assert analytics["total_courses"] > 0
+        assert len(analytics["course_titles"]) > 0
 
     @pytest.mark.skipif(not config.OPENROUTER_API_KEY, reason="No API key")
     def test_simple_content_query(self):
@@ -84,6 +86,7 @@ class TestRAGSystemQueries:
             print(f"\nException occurred: {type(e).__name__}")
             print(f"Exception message: {str(e)}")
             import traceback
+
             print(f"Traceback:\n{traceback.format_exc()}")
             raise
 
@@ -108,7 +111,9 @@ class TestRAGSystemQueries:
             assert len(response) > 0
 
             # Check session history
-            history = self.rag_system.session_manager.get_conversation_history(session_id)
+            history = self.rag_system.session_manager.get_conversation_history(
+                session_id
+            )
             print(f"\nSession history:\n{history}")
 
             assert history is not None
@@ -117,6 +122,7 @@ class TestRAGSystemQueries:
             print(f"\nException occurred: {type(e).__name__}")
             print(f"Exception message: {str(e)}")
             import traceback
+
             print(f"Traceback:\n{traceback.format_exc()}")
             raise
 
@@ -125,12 +131,12 @@ class TestRAGSystemQueries:
         print("\n=== Test Both Tools Registered ===")
 
         tools = self.rag_system.tool_manager.get_tool_definitions()
-        tool_names = [t.get('function', {}).get('name') for t in tools]
+        tool_names = [t.get("function", {}).get("name") for t in tools]
 
         print(f"Registered tools: {tool_names}")
 
-        assert 'search_course_content' in tool_names
-        assert 'get_course_outline' in tool_names
+        assert "search_course_content" in tool_names
+        assert "get_course_outline" in tool_names
 
 
 class TestVectorStoreIntegration:
