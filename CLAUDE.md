@@ -22,11 +22,11 @@ This is a RAG (Retrieval-Augmented Generation) chatbot for educational course ma
 
 # Manual start
 cd backend
-uv run uvicorn app:app --reload --port 8000
+uv run uvicorn app:app --reload --port 8001
 
 # Access points
-# - Web UI: http://localhost:8000
-# - API docs: http://localhost:8000/docs
+# - Web UI: http://localhost:8001
+# - API docs: http://localhost:8001/docs
 ```
 
 ### Environment Setup
