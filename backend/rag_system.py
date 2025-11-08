@@ -23,10 +23,8 @@ class RAGSystem:
             config.CHROMA_PATH, config.EMBEDDING_MODEL, config.MAX_RESULTS
         )
         self.ai_generator = AIGenerator(
-            api_key=config.OPENROUTER_API_KEY,
-            base_url=config.OPENROUTER_BASE_URL,
-            model=config.DEFAULT_MODEL,
-            fallback_models=config.FALLBACK_MODELS,
+            api_key=config.ANTHROPIC_API_KEY,
+            model=config.ANTHROPIC_MODEL,
         )
         self.session_manager = SessionManager(config.MAX_HISTORY)
 

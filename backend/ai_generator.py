@@ -1,14 +1,11 @@
 import json
-import ssl
 from typing import Any, Dict, List, Optional
 
-import certifi
-import httpx
-from openai import OpenAI
+from anthropic import Anthropic
 
 
 class AIGenerator:
-    """Handles interactions with OpenRouter API using OpenAI-compatible interface"""
+    """Handles interactions with Anthropic API for Claude"""
 
     # Maximum sequential tool calling rounds
     MAX_TOOL_ROUNDS = 2
@@ -65,49 +62,19 @@ All responses must be:
 Provide only the direct answer to what was asked.
 """
 
-    def __init__(
-        self, api_key: str, base_url: str, model: str, fallback_models: List[str]
-    ):
+    def __init__(self, api_key: str, model: str):
         """
-        Initialize OpenAI client for OpenRouter with proper SSL configuration.
+        Initialize Anthropic client.
 
         Args:
-            api_key: OpenRouter API key
-            base_url: OpenRouter API base URL
-            model: Default model to use
-            fallback_models: Priority-ordered list of fallback models
+            api_key: Anthropic API key
+            model: Model to use (e.g., claude-sonnet-4-20250514)
         """
-        # Create SSL context with certifi certificates for proper verification
-        try:
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-
-            # Create HTTP client with proper SSL configuration
-            http_client = httpx.Client(
-                verify=ssl_context, timeout=60.0  # 60 second timeout
-            )
-
-            self.client = OpenAI(
-                api_key=api_key, base_url=base_url, http_client=http_client
-            )
-        except Exception as e:
-            # Fallback to default client if SSL configuration fails
-            print(f"Warning: Could not configure SSL with certifi, using default: {e}")
-            self.client = OpenAI(api_key=api_key, base_url=base_url)
-
-        self.current_model = model
-        self.fallback_models = fallback_models
-        self.last_model_used = model
+        self.client = Anthropic(api_key=api_key)
+        self.model = model
 
         # Pre-build base API parameters
         self.base_params = {"temperature": 0, "max_tokens": 800}
-
-    def set_model(self, model: str) -> None:
-        """Change the active model"""
-        self.current_model = model
-
-    def get_current_model(self) -> str:
-        """Return the currently active model"""
-        return self.current_model
 
     def generate_response(
         self,
@@ -118,87 +85,68 @@ Provide only the direct answer to what was asked.
     ) -> str:
         """
         Generate AI response with optional tool usage and conversation context.
-        Uses auto-fallback if model fails.
 
         Args:
             query: The user's question or request
             conversation_history: Previous messages for context
-            tools: Available tools the AI can use
+            tools: Available tools the AI can use (Anthropic format)
             tool_manager: Manager to execute tools
 
         Returns:
             Generated response as string
         """
-        # Build messages with system prompt as first message
+        # Build system prompt with history if available
         system_content = (
             f"{self.SYSTEM_PROMPT}\n\nPrevious conversation:\n{conversation_history}"
             if conversation_history
             else self.SYSTEM_PROMPT
         )
 
-        messages = [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": query},
-        ]
+        # Build initial messages (just user message, system is separate)
+        messages = [{"role": "user", "content": query}]
 
         # Prepare API call parameters
         api_params = {
             **self.base_params,
-            "messages": messages.copy(),  # Copy to avoid reference issues
-            "model": self.current_model,
+            "model": self.model,
+            "system": system_content,
+            "messages": messages.copy(),
         }
 
-        # Add tools if available (OpenAI format)
+        # Add tools if available (Anthropic format)
         if tools:
             api_params["tools"] = tools
-            api_params["tool_choice"] = "auto"
 
-        # Try with auto-fallback
-        models_to_try = [self.current_model] + [
-            m for m in self.fallback_models if m != self.current_model
-        ]
+        try:
+            response = self.client.messages.create(**api_params)
 
-        for model_index, model in enumerate(models_to_try):
-            try:
-                api_params["model"] = model
-                response = self.client.chat.completions.create(**api_params)
+            # Handle tool execution if needed
+            if response.stop_reason == "tool_use" and tool_manager:
+                return self._handle_tool_execution(
+                    response, messages, api_params, tool_manager, system_content
+                )
 
-                # Update last successful model
-                self.last_model_used = model
+            # Return direct response
+            return self._extract_text_content(response)
 
-                # Handle tool execution if needed
-                if response.choices[0].finish_reason == "tool_calls" and tool_manager:
-                    return self._handle_tool_execution(
-                        response, messages, api_params, tool_manager
-                    )
+        except Exception as e:
+            error_msg = str(e)
+            # Provide user-friendly error messages
+            if "Connection error" in error_msg or "connect" in error_msg.lower():
+                return "I'm unable to connect to the AI service. Please check your network connection or try again later."
+            elif "CERTIFICATE" in error_msg.upper() or "SSL" in error_msg.upper():
+                return "I'm experiencing SSL/certificate issues connecting to the AI service. Please contact support."
+            elif "timeout" in error_msg.lower():
+                return "The AI service request timed out. Please try again."
+            else:
+                return f"I'm experiencing technical difficulties. Error: {error_msg[:100]}"
 
-                # Return direct response
-                return response.choices[0].message.content or ""
-
-            except Exception as e:
-                error_msg = str(e)
-                # If this isn't the last model to try, continue to next
-                if model_index < len(models_to_try) - 1:
-                    continue
-                else:
-                    # All models failed - provide user-friendly message
-                    if (
-                        "Connection error" in error_msg
-                        or "connect" in error_msg.lower()
-                    ):
-                        return "I'm unable to connect to the AI service. Please check your network connection or try again later."
-                    elif (
-                        "CERTIFICATE" in error_msg.upper() or "SSL" in error_msg.upper()
-                    ):
-                        return "I'm experiencing SSL/certificate issues connecting to the AI service. Please contact support."
-                    elif "timeout" in error_msg.lower():
-                        return "The AI service request timed out. Please try again."
-                    else:
-                        return f"I'm experiencing technical difficulties. Error: {error_msg[:100]}"
-
-        return (
-            "I'm unable to process your request. No AI models are currently available."
-        )
+    def _extract_text_content(self, response) -> str:
+        """Extract text content from Anthropic response"""
+        for block in response.content:
+            if block.type == "text":
+                return block.text
+        return ""
 
     def _handle_tool_execution(
         self,
@@ -206,21 +154,18 @@ Provide only the direct answer to what was asked.
         messages: List[Dict],
         base_params: Dict[str, Any],
         tool_manager,
+        system_content: str,
     ) -> str:
         """
         Handle execution of tools with support for sequential rounds.
         Allows Claude to make multiple tool calls across up to MAX_TOOL_ROUNDS rounds.
 
-        Architecture:
-        - Round 1: Initial tool call(s) + results → API call WITH tools
-        - Round 2: Optional second tool call(s) + results → API call WITHOUT tools
-        - Terminates early if Claude doesn't use tools
-
         Args:
             initial_response: First response containing tool calls
-            messages: Current message history [system, user]
-            base_params: Base API parameters including tools
+            messages: Current message history [user]
+            base_params: Base API parameters
             tool_manager: Manager to execute tools
+            system_content: System prompt text
 
         Returns:
             Final response text after all rounds
@@ -233,11 +178,13 @@ Provide only the direct answer to what was asked.
             current_round += 1
 
             # Check if this response has tool calls
-            tool_calls = current_response.choices[0].message.tool_calls
+            has_tool_use = any(
+                block.type == "tool_use" for block in current_response.content
+            )
 
-            if not tool_calls:
+            if not has_tool_use:
                 # Natural termination - Claude chose not to use tools
-                return current_response.choices[0].message.content or ""
+                return self._extract_text_content(current_response)
 
             # Process this round of tool calls
             messages = self._process_tool_round(
@@ -248,21 +195,26 @@ Provide only the direct answer to what was asked.
             should_include_tools = current_round < self.MAX_TOOL_ROUNDS
 
             # Build parameters for next API call
-            next_params = self._build_round_params(
-                base_params, messages, include_tools=should_include_tools
-            )
+            next_params = {
+                **self.base_params,
+                "model": self.model,
+                "system": system_content,
+                "messages": messages.copy(),
+            }
 
-            # Make next API call (with fallback handling)
+            # Add tools if we haven't reached max rounds
+            if should_include_tools and "tools" in base_params:
+                next_params["tools"] = base_params["tools"]
+
+            # Make next API call
             try:
-                current_response = self._make_api_call_with_fallback(
-                    next_params, base_params["model"]
-                )
+                current_response = self.client.messages.create(**next_params)
             except Exception as e:
                 # Error handling - return partial results if available
                 return self._handle_api_error(e, messages, current_round)
 
         # Max rounds reached - return final response
-        return current_response.choices[0].message.content or ""
+        return self._extract_text_content(current_response)
 
     def _process_tool_round(
         self, response, messages: List[Dict], tool_manager
@@ -278,114 +230,42 @@ Provide only the direct answer to what was asked.
         Returns:
             Updated messages list with assistant message and tool results
         """
-        tool_calls = response.choices[0].message.tool_calls
+        # Add assistant's message with tool uses
+        assistant_content = []
+        tool_uses = []
 
-        # Add assistant's message with tool calls
-        assistant_message = {
-            "role": "assistant",
-            "content": response.choices[0].message.content,
-            "tool_calls": [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                }
-                for tc in tool_calls
-            ],
-        }
-        messages.append(assistant_message)
-
-        # Execute each tool and add results
-        for tool_call in tool_calls:
-            # Parse arguments (OpenAI returns JSON string)
-            try:
-                tool_args = json.loads(tool_call.function.arguments)
-            except json.JSONDecodeError:
-                tool_args = {}
-
-            # Execute tool
-            try:
-                tool_result = tool_manager.execute_tool(
-                    tool_call.function.name, **tool_args
+        for block in response.content:
+            if block.type == "text":
+                assistant_content.append({"type": "text", "text": block.text})
+            elif block.type == "tool_use":
+                assistant_content.append(
+                    {
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input,
+                    }
                 )
+                tool_uses.append(block)
+
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        # Execute each tool and collect results
+        tool_results = []
+        for tool_use in tool_uses:
+            try:
+                tool_result = tool_manager.execute_tool(tool_use.name, **tool_use.input)
             except Exception as e:
-                # Individual tool failure - add error message as result
                 tool_result = f"Error executing tool: {str(e)}"
 
-            # Add tool result message
-            messages.append(
-                {"role": "tool", "tool_call_id": tool_call.id, "content": tool_result}
+            tool_results.append(
+                {"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}
             )
 
+        # Add tool results as user message
+        messages.append({"role": "user", "content": tool_results})
+
         return messages
-
-    def _build_round_params(
-        self, base_params: Dict, messages: List[Dict], include_tools: bool
-    ) -> Dict[str, Any]:
-        """
-        Build API parameters for a round with conditional tool inclusion.
-
-        Args:
-            base_params: Base parameters (temperature, max_tokens, tools)
-            messages: Current message history
-            include_tools: Whether to include tool definitions
-
-        Returns:
-            Complete API call parameters
-        """
-        params = {
-            **self.base_params,
-            "messages": messages.copy(),  # Copy to avoid reference issues
-            "model": base_params["model"],
-        }
-
-        if include_tools and "tools" in base_params:
-            # Tools available - Claude can call them
-            params["tools"] = base_params["tools"]
-            params["tool_choice"] = "auto"
-        # else: No tools - Claude must provide final answer
-
-        return params
-
-    def _make_api_call_with_fallback(
-        self, api_params: Dict[str, Any], primary_model: str
-    ):
-        """
-        Make API call with fallback model support.
-
-        Args:
-            api_params: API call parameters
-            primary_model: Primary model to try
-
-        Returns:
-            API response
-
-        Raises:
-            Exception: If all models fail
-        """
-        models_to_try = [primary_model] + [
-            m for m in self.fallback_models if m != primary_model
-        ]
-
-        for model_index, model in enumerate(models_to_try):
-            try:
-                api_params["model"] = model
-                response = self.client.chat.completions.create(**api_params)
-                self.last_model_used = model
-                return response
-
-            except Exception as e:
-                # If this isn't the last model to try, continue to next
-                if model_index < len(models_to_try) - 1:
-                    continue
-                else:
-                    # All models failed
-                    raise
-
-        raise Exception("All models failed")
 
     def _handle_api_error(
         self, error: Exception, messages: List[Dict], round_num: int

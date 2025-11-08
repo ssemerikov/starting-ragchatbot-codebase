@@ -64,25 +64,12 @@ class CourseStats(BaseModel):
 
 
 class ModelInfo(BaseModel):
-    """Information about a model"""
+    """Information about the current model"""
 
     id: str
     name: str
     context: int
     description: str
-
-
-class ModelsResponse(BaseModel):
-    """Response model for available models"""
-
-    current_model: str
-    available_models: List[ModelInfo]
-
-
-class ModelSelectRequest(BaseModel):
-    """Request model for selecting a model"""
-
-    model_id: str
 
 
 # API Endpoints
@@ -118,51 +105,15 @@ async def get_course_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/models", response_model=ModelsResponse)
-async def get_available_models():
-    """Get list of available models and current selection"""
-    try:
-        current_model = rag_system.ai_generator.get_current_model()
-
-        # Build list of model info from config
-        models = []
-        for model_id, model_data in config.AVAILABLE_MODELS.items():
-            models.append(
-                ModelInfo(
-                    id=model_id,
-                    name=model_data["name"],
-                    context=model_data["context"],
-                    description=model_data["description"],
-                )
-            )
-
-        return ModelsResponse(current_model=current_model, available_models=models)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/models/select")
-async def select_model(request: ModelSelectRequest):
-    """Switch to a different model"""
-    try:
-        # Validate model exists
-        if request.model_id not in config.AVAILABLE_MODELS:
-            raise HTTPException(
-                status_code=400, detail=f"Model '{request.model_id}' not found"
-            )
-
-        # Update the model
-        rag_system.ai_generator.set_model(request.model_id)
-
-        return {
-            "success": True,
-            "current_model": request.model_id,
-            "message": f"Switched to {config.AVAILABLE_MODELS[request.model_id]['name']}",
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/api/models", response_model=ModelInfo)
+async def get_model_info():
+    """Get information about the current model"""
+    return ModelInfo(
+        id=config.ANTHROPIC_MODEL,
+        name="Claude Sonnet 4",
+        context=200000,
+        description="Anthropic's Claude Sonnet 4 with tool use support"
+    )
 
 
 @app.on_event("startup")

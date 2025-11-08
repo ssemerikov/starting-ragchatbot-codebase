@@ -9,7 +9,7 @@ class Tool(ABC):
 
     @abstractmethod
     def get_tool_definition(self) -> Dict[str, Any]:
-        """Return OpenAI-compatible tool definition for this tool"""
+        """Return Anthropic-compatible tool definition for this tool"""
         pass
 
     @abstractmethod
@@ -26,30 +26,27 @@ class CourseSearchTool(Tool):
         self.last_sources = []  # Track sources from last search
 
     def get_tool_definition(self) -> Dict[str, Any]:
-        """Return OpenAI-compatible tool definition for this tool"""
+        """Return Anthropic-compatible tool definition for this tool"""
         return {
-            "type": "function",
-            "function": {
-                "name": "search_course_content",
-                "description": "Search course materials with smart course name matching and lesson filtering",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "What to search for in the course content",
-                        },
-                        "course_name": {
-                            "type": "string",
-                            "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction')",
-                        },
-                        "lesson_number": {
-                            "type": "integer",
-                            "description": "Specific lesson number to search within (e.g. 1, 2, 3)",
-                        },
+            "name": "search_course_content",
+            "description": "Search course materials with smart course name matching and lesson filtering",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to search for in the course content",
                     },
-                    "required": ["query"],
+                    "course_name": {
+                        "type": "string",
+                        "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction')",
+                    },
+                    "lesson_number": {
+                        "type": "integer",
+                        "description": "Specific lesson number to search within (e.g. 1, 2, 3)",
+                    },
                 },
+                "required": ["query"],
             },
         }
 
@@ -135,22 +132,19 @@ class CourseOutlineTool(Tool):
         self.store = vector_store
 
     def get_tool_definition(self) -> Dict[str, Any]:
-        """Return OpenAI-compatible tool definition for this tool"""
+        """Return Anthropic-compatible tool definition for this tool"""
         return {
-            "type": "function",
-            "function": {
-                "name": "get_course_outline",
-                "description": "Get comprehensive course information including title, instructor, course link, and complete lesson list with titles and links",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "course_name": {
-                            "type": "string",
-                            "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction')",
-                        }
-                    },
-                    "required": ["course_name"],
+            "name": "get_course_outline",
+            "description": "Get comprehensive course information including title, instructor, course link, and complete lesson list with titles and links",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "course_name": {
+                        "type": "string",
+                        "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction')",
+                    }
                 },
+                "required": ["course_name"],
             },
         }
 
@@ -221,14 +215,14 @@ class ToolManager:
     def register_tool(self, tool: Tool):
         """Register any tool that implements the Tool interface"""
         tool_def = tool.get_tool_definition()
-        # OpenAI format has name nested under "function"
-        tool_name = tool_def.get("function", {}).get("name")
+        # Anthropic format has name at the root level
+        tool_name = tool_def.get("name")
         if not tool_name:
             raise ValueError("Tool must have a 'name' in its definition")
         self.tools[tool_name] = tool
 
     def get_tool_definitions(self) -> list:
-        """Get all tool definitions for OpenAI-compatible tool calling"""
+        """Get all tool definitions for Anthropic-compatible tool calling"""
         return [tool.get_tool_definition() for tool in self.tools.values()]
 
     def execute_tool(self, tool_name: str, **kwargs) -> str:
