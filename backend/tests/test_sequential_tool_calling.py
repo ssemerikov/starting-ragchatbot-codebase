@@ -1,14 +1,17 @@
 """Tests for sequential tool calling functionality"""
-import sys
+
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
 from ai_generator import AIGenerator
-from search_tools import ToolManager, CourseSearchTool
-from vector_store import VectorStore
 from config import config
+from search_tools import CourseSearchTool, ToolManager
+from vector_store import VectorStore
 
 
 class TestSequentialToolCalling:
@@ -19,16 +22,22 @@ class TestSequentialToolCalling:
         """Create mock tool manager"""
         manager = Mock()
         manager.execute_tool = Mock(return_value="Tool result")
-        manager.get_tool_definitions = Mock(return_value=[
-            {
-                "type": "function",
-                "function": {
-                    "name": "search_course_content",
-                    "description": "Search course content",
-                    "parameters": {"type": "object", "properties": {}, "required": []}
+        manager.get_tool_definitions = Mock(
+            return_value=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search_course_content",
+                        "description": "Search course content",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {},
+                            "required": [],
+                        },
+                    },
                 }
-            }
-        ])
+            ]
+        )
         return manager
 
     def _create_tool_call_response(self, tool_name: str, tool_args: str, tool_id: str):
@@ -65,20 +74,18 @@ class TestSequentialToolCalling:
         """Test that single tool call still works (baseline behavior)"""
         print("\n=== Test Single Tool Call ===")
 
-        with patch('ai_generator.OpenAI'):
+        with patch("ai_generator.OpenAI"):
             ai_gen = AIGenerator(
                 api_key="test",
                 base_url="https://test.url",
                 model="test-model",
-                fallback_models=[]
+                fallback_models=[],
             )
             ai_gen.client = Mock()
 
             # Mock responses: tool call → final answer
             initial_response = self._create_tool_call_response(
-                "search_course_content",
-                '{"query": "MCP"}',
-                "call_1"
+                "search_course_content", '{"query": "MCP"}', "call_1"
             )
             final_response = self._create_text_response("Here's what MCP covers...")
 
@@ -89,8 +96,10 @@ class TestSequentialToolCalling:
             # Execute
             result = ai_gen.generate_response(
                 query="What does MCP cover?",
-                tools=[{"type": "function", "function": {"name": "search_course_content"}}],
-                tool_manager=mock_tool_manager
+                tools=[
+                    {"type": "function", "function": {"name": "search_course_content"}}
+                ],
+                tool_manager=mock_tool_manager,
             )
 
             print(f"Result: {result}")
@@ -99,7 +108,9 @@ class TestSequentialToolCalling:
 
             # Verify
             assert "MCP covers" in result
-            assert ai_gen.client.chat.completions.create.call_count == 2  # Initial + after tools
+            assert (
+                ai_gen.client.chat.completions.create.call_count == 2
+            )  # Initial + after tools
             assert mock_tool_manager.execute_tool.call_count == 1
 
     def test_two_sequential_tool_calls(self, mock_tool_manager):
@@ -111,12 +122,12 @@ class TestSequentialToolCalling:
             side_effect=["MCP result", "Chroma result"]
         )
 
-        with patch('ai_generator.OpenAI'):
+        with patch("ai_generator.OpenAI"):
             ai_gen = AIGenerator(
                 api_key="test",
                 base_url="https://test.url",
                 model="test-model",
-                fallback_models=[]
+                fallback_models=[],
             )
             ai_gen.client = Mock()
 
@@ -124,12 +135,12 @@ class TestSequentialToolCalling:
             round1_response = self._create_tool_call_response(
                 "search_course_content",
                 '{"query": "MCP", "lesson_number": 4}',
-                "call_1"
+                "call_1",
             )
             round2_response = self._create_tool_call_response(
                 "search_course_content",
                 '{"query": "Chroma", "lesson_number": 2}',
-                "call_2"
+                "call_2",
             )
             final_response = self._create_text_response(
                 "Comparing MCP vs Chroma: MCP focuses on X while Chroma covers Y."
@@ -142,8 +153,10 @@ class TestSequentialToolCalling:
             # Execute
             result = ai_gen.generate_response(
                 query="Compare MCP lesson 4 vs Chroma lesson 2",
-                tools=[{"type": "function", "function": {"name": "search_course_content"}}],
-                tool_manager=mock_tool_manager
+                tools=[
+                    {"type": "function", "function": {"name": "search_course_content"}}
+                ],
+                tool_manager=mock_tool_manager,
             )
 
             print(f"Result: {result}")
@@ -152,19 +165,21 @@ class TestSequentialToolCalling:
 
             # Verify
             assert "Comparing" in result or "MCP" in result
-            assert ai_gen.client.chat.completions.create.call_count == 3  # Round1 + Round2 + Final
+            assert (
+                ai_gen.client.chat.completions.create.call_count == 3
+            )  # Round1 + Round2 + Final
             assert mock_tool_manager.execute_tool.call_count == 2  # Two tool calls
 
     def test_early_termination_no_tools(self, mock_tool_manager):
         """Test early termination when Claude doesn't use tools in first response"""
         print("\n=== Test Early Termination (No Tools) ===")
 
-        with patch('ai_generator.OpenAI'):
+        with patch("ai_generator.OpenAI"):
             ai_gen = AIGenerator(
                 api_key="test",
                 base_url="https://test.url",
                 model="test-model",
-                fallback_models=[]
+                fallback_models=[],
             )
             ai_gen.client = Mock()
 
@@ -177,8 +192,10 @@ class TestSequentialToolCalling:
 
             result = ai_gen.generate_response(
                 query="What is machine learning?",
-                tools=[{"type": "function", "function": {"name": "search_course_content"}}],
-                tool_manager=mock_tool_manager
+                tools=[
+                    {"type": "function", "function": {"name": "search_course_content"}}
+                ],
+                tool_manager=mock_tool_manager,
             )
 
             print(f"Result: {result}")
@@ -187,27 +204,27 @@ class TestSequentialToolCalling:
 
             # Verify
             assert "general knowledge" in result
-            assert ai_gen.client.chat.completions.create.call_count == 1  # Only initial call
+            assert (
+                ai_gen.client.chat.completions.create.call_count == 1
+            )  # Only initial call
             assert mock_tool_manager.execute_tool.call_count == 0  # No tools used
 
     def test_early_termination_after_one_round(self, mock_tool_manager):
         """Test early termination when Claude uses tool once then answers"""
         print("\n=== Test Early Termination (After One Round) ===")
 
-        with patch('ai_generator.OpenAI'):
+        with patch("ai_generator.OpenAI"):
             ai_gen = AIGenerator(
                 api_key="test",
                 base_url="https://test.url",
                 model="test-model",
-                fallback_models=[]
+                fallback_models=[],
             )
             ai_gen.client = Mock()
 
             # Round 1: tool call → Round 2: direct answer (no tools)
             round1_response = self._create_tool_call_response(
-                "search_course_content",
-                '{"query": "MCP"}',
-                "call_1"
+                "search_course_content", '{"query": "MCP"}', "call_1"
             )
             final_response = self._create_text_response(
                 "Based on the search, here's the answer..."
@@ -219,8 +236,10 @@ class TestSequentialToolCalling:
 
             result = ai_gen.generate_response(
                 query="Tell me about MCP",
-                tools=[{"type": "function", "function": {"name": "search_course_content"}}],
-                tool_manager=mock_tool_manager
+                tools=[
+                    {"type": "function", "function": {"name": "search_course_content"}}
+                ],
+                tool_manager=mock_tool_manager,
             )
 
             print(f"Result: {result}")
@@ -229,25 +248,31 @@ class TestSequentialToolCalling:
 
             # Verify
             assert "answer" in result
-            assert ai_gen.client.chat.completions.create.call_count == 2  # Round1 + Final
+            assert (
+                ai_gen.client.chat.completions.create.call_count == 2
+            )  # Round1 + Final
             assert mock_tool_manager.execute_tool.call_count == 1  # Only one tool call
 
     def test_max_rounds_enforcement(self, mock_tool_manager):
         """Test that system enforces 2-round maximum"""
         print("\n=== Test Max Rounds Enforcement ===")
 
-        with patch('ai_generator.OpenAI'):
+        with patch("ai_generator.OpenAI"):
             ai_gen = AIGenerator(
                 api_key="test",
                 base_url="https://test.url",
                 model="test-model",
-                fallback_models=[]
+                fallback_models=[],
             )
             ai_gen.client = Mock()
 
             # Claude keeps trying to call tools (3 responses with tool calls)
-            tool_response_1 = self._create_tool_call_response("search", '{"q":"1"}', "call_1")
-            tool_response_2 = self._create_tool_call_response("search", '{"q":"2"}', "call_2")
+            tool_response_1 = self._create_tool_call_response(
+                "search", '{"q":"1"}', "call_1"
+            )
+            tool_response_2 = self._create_tool_call_response(
+                "search", '{"q":"2"}', "call_2"
+            )
             # After round 2, tools are removed, so this would be final response
             final_response = self._create_text_response("Final answer after 2 rounds")
 
@@ -258,7 +283,7 @@ class TestSequentialToolCalling:
             result = ai_gen.generate_response(
                 query="Complex multi-step query",
                 tools=[{"type": "function", "function": {"name": "search"}}],
-                tool_manager=mock_tool_manager
+                tool_manager=mock_tool_manager,
             )
 
             print(f"Result: {result}")
@@ -266,8 +291,12 @@ class TestSequentialToolCalling:
             print(f"Tool executions: {mock_tool_manager.execute_tool.call_count}")
 
             # Verify max 2 tool rounds executed
-            assert ai_gen.client.chat.completions.create.call_count == 3  # Max: Round1 + Round2 + Final
-            assert mock_tool_manager.execute_tool.call_count == 2  # Only 2 tool executions
+            assert (
+                ai_gen.client.chat.completions.create.call_count == 3
+            )  # Max: Round1 + Round2 + Final
+            assert (
+                mock_tool_manager.execute_tool.call_count == 2
+            )  # Only 2 tool executions
 
     def test_message_accumulation_across_rounds(self, mock_tool_manager):
         """Test that messages accumulate correctly across rounds"""
@@ -275,17 +304,21 @@ class TestSequentialToolCalling:
 
         mock_tool_manager.execute_tool = Mock(side_effect=["Result 1", "Result 2"])
 
-        with patch('ai_generator.OpenAI'):
+        with patch("ai_generator.OpenAI"):
             ai_gen = AIGenerator(
                 api_key="test",
                 base_url="https://test.url",
                 model="test-model",
-                fallback_models=[]
+                fallback_models=[],
             )
             ai_gen.client = Mock()
 
-            round1_response = self._create_tool_call_response("search", '{"q":"1"}', "call_1")
-            round2_response = self._create_tool_call_response("search", '{"q":"2"}', "call_2")
+            round1_response = self._create_tool_call_response(
+                "search", '{"q":"1"}', "call_1"
+            )
+            round2_response = self._create_tool_call_response(
+                "search", '{"q":"2"}', "call_2"
+            )
             final_response = self._create_text_response("Final answer")
 
             ai_gen.client.chat.completions.create = Mock(
@@ -295,7 +328,7 @@ class TestSequentialToolCalling:
             result = ai_gen.generate_response(
                 query="Test query",
                 tools=[{"type": "function", "function": {"name": "search"}}],
-                tool_manager=mock_tool_manager
+                tool_manager=mock_tool_manager,
             )
 
             # Verify message structure in API calls
@@ -326,17 +359,21 @@ class TestSequentialToolCalling:
         """Test that tools are available in early rounds but removed in final call"""
         print("\n=== Test Tools Availability Per Round ===")
 
-        with patch('ai_generator.OpenAI'):
+        with patch("ai_generator.OpenAI"):
             ai_gen = AIGenerator(
                 api_key="test",
                 base_url="https://test.url",
                 model="test-model",
-                fallback_models=[]
+                fallback_models=[],
             )
             ai_gen.client = Mock()
 
-            round1_response = self._create_tool_call_response("search", '{"q":"1"}', "call_1")
-            round2_response = self._create_tool_call_response("search", '{"q":"2"}', "call_2")
+            round1_response = self._create_tool_call_response(
+                "search", '{"q":"1"}', "call_1"
+            )
+            round2_response = self._create_tool_call_response(
+                "search", '{"q":"2"}', "call_2"
+            )
             final_response = self._create_text_response("Final")
 
             ai_gen.client.chat.completions.create = Mock(
@@ -346,7 +383,7 @@ class TestSequentialToolCalling:
             result = ai_gen.generate_response(
                 query="Test",
                 tools=[{"type": "function", "function": {"name": "search"}}],
-                tool_manager=mock_tool_manager
+                tool_manager=mock_tool_manager,
             )
 
             calls = ai_gen.client.chat.completions.create.call_args_list
@@ -367,29 +404,28 @@ class TestSequentialToolCalling:
         """Test error handling during sequential tool calling"""
         print("\n=== Test API Error Handling ===")
 
-        with patch('ai_generator.OpenAI'):
+        with patch("ai_generator.OpenAI"):
             ai_gen = AIGenerator(
                 api_key="test",
                 base_url="https://test.url",
                 model="test-model",
-                fallback_models=[]
+                fallback_models=[],
             )
             ai_gen.client = Mock()
 
-            round1_response = self._create_tool_call_response("search", '{"q":"1"}', "call_1")
+            round1_response = self._create_tool_call_response(
+                "search", '{"q":"1"}', "call_1"
+            )
 
             # Round 2 fails
             ai_gen.client.chat.completions.create = Mock(
-                side_effect=[
-                    round1_response,
-                    Exception("Connection error")
-                ]
+                side_effect=[round1_response, Exception("Connection error")]
             )
 
             result = ai_gen.generate_response(
                 query="Test query",
                 tools=[{"type": "function", "function": {"name": "search"}}],
-                tool_manager=mock_tool_manager
+                tool_manager=mock_tool_manager,
             )
 
             print(f"Result: {result}")
