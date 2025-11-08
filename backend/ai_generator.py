@@ -1,6 +1,9 @@
 import json
 from openai import OpenAI
 from typing import List, Optional, Dict, Any
+import httpx
+import ssl
+import certifi
 
 class AIGenerator:
     """Handles interactions with OpenRouter API using OpenAI-compatible interface"""
@@ -44,7 +47,7 @@ Provide only the direct answer to what was asked.
 
     def __init__(self, api_key: str, base_url: str, model: str, fallback_models: List[str]):
         """
-        Initialize OpenAI client for OpenRouter.
+        Initialize OpenAI client for OpenRouter with proper SSL configuration.
 
         Args:
             api_key: OpenRouter API key
@@ -52,10 +55,29 @@ Provide only the direct answer to what was asked.
             model: Default model to use
             fallback_models: Priority-ordered list of fallback models
         """
-        self.client = OpenAI(
-            api_key=api_key,
-            base_url=base_url
-        )
+        # Create SSL context with certifi certificates for proper verification
+        try:
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+            # Create HTTP client with proper SSL configuration
+            http_client = httpx.Client(
+                verify=ssl_context,
+                timeout=60.0  # 60 second timeout
+            )
+
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                http_client=http_client
+            )
+        except Exception as e:
+            # Fallback to default client if SSL configuration fails
+            print(f"Warning: Could not configure SSL with certifi, using default: {e}")
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url=base_url
+            )
+
         self.current_model = model
         self.fallback_models = fallback_models
         self.last_model_used = model
@@ -139,10 +161,17 @@ Provide only the direct answer to what was asked.
                 if model_index < len(models_to_try) - 1:
                     continue
                 else:
-                    # All models failed
-                    return f"Error: All models failed. Last error with {model}: {error_msg}"
+                    # All models failed - provide user-friendly message
+                    if "Connection error" in error_msg or "connect" in error_msg.lower():
+                        return "I'm unable to connect to the AI service. Please check your network connection or try again later."
+                    elif "CERTIFICATE" in error_msg.upper() or "SSL" in error_msg.upper():
+                        return "I'm experiencing SSL/certificate issues connecting to the AI service. Please contact support."
+                    elif "timeout" in error_msg.lower():
+                        return "The AI service request timed out. Please try again."
+                    else:
+                        return f"I'm experiencing technical difficulties. Error: {error_msg[:100]}"
 
-        return "Error: No models available to process request"
+        return "I'm unable to process your request. No AI models are currently available."
 
     def _handle_tool_execution(self, initial_response, messages: List[Dict],
                                base_params: Dict[str, Any], tool_manager) -> str:
@@ -221,7 +250,11 @@ Provide only the direct answer to what was asked.
                 return final_response.choices[0].message.content or ""
             except Exception as e:
                 if model == models_to_try[-1]:
-                    return f"Error getting final response: {str(e)}"
+                    error_msg = str(e)
+                    if "Connection error" in error_msg or "connect" in error_msg.lower():
+                        return "I'm unable to connect to the AI service. Please check your network connection or try again later."
+                    else:
+                        return f"I'm experiencing technical difficulties processing your request."
                 continue
 
-        return "Error: Could not get final response from any model"
+        return "I'm unable to process your request. No AI models are currently available."
